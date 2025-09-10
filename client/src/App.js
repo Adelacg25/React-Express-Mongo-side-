@@ -1,23 +1,18 @@
-import logo from './logo.svg';
-import './App.css';
+import React, { useState } from 'react';
+import AddResident from './AddResident';
+import SearchResident from './SearchResident';
+import ResidentList from './ResidentList';
 
 function App() {
+  const [residents, setResidents] = useState([]);
+  const [filtered, setFiltered] = useState([]);
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div style={{ padding: '20px', fontFamily: 'Arial' }}>
+      <h1>Neurology Residency Scheduler Prototype</h1>
+      <AddResident residents={residents} setResidents={setResidents} />
+      <SearchResident residents={residents} setFiltered={setFiltered} />
+      <ResidentList residents={filtered.length ? filtered : residents} />
     </div>
   );
 }
