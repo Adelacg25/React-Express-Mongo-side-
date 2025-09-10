@@ -9,7 +9,7 @@ function App() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial' }}>
-      <h1>Neurology Residency Scheduler Prototype</h1>
+      <h1>Neurology Residency Scheduler WebProto</h1>
       <AddResident residents={residents} setResidents={setResidents} />
       <SearchResident residents={residents} setFiltered={setFiltered} />
       <ResidentList residents={filtered.length ? filtered : residents} />
