@@ -8,10 +8,9 @@ import { fileURLToPath } from "url";
 dotenv.config();
 
 const PORT = process.env.PORT || 4000;
-const MONGODB_URI = process.env.MONGODB_URI; // put your encoded URI in server/.env
+const MONGODB_URI = process.env.MONGODB_URI; 
 const DB_NAME = process.env.DB_NAME || "Residents";
 
-// ---- resolve client/dist for static serving ----
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DIST_DIR = path.join(__dirname, "..", "client", "dist");
@@ -50,36 +49,30 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
-// ---- DB ----
 const client = new MongoClient(MONGODB_URI);
 await client.connect();
 const db = client.db(DB_NAME);
 const residents = db.collection("residentCollection");
 
-// ---- HTTP server ----
 const server = http.createServer(async (req, res) => {
   try {
     const { method, url } = req;
 
-    // CORS preflight
     if (method === "OPTIONS") {
       res.writeHead(204, {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type"
       });
-      return res.end(); // IMPORTANT: return
+      return res.end(); 
     }
 
-    // Parse URL once
     const u = new URL(url, `http://localhost:${PORT}`);
 
-    // Health
     if (u.pathname === "/api/health" && method === "GET") {
       return sendJson(res, 200, { ok: true, now: new Date().toISOString() });
     }
 
-    // Lookup: GET /api/residents/status?name=Grace
     if (u.pathname === "/api/residents/status" && method === "GET") {
       try {
         const name = (u.searchParams.get("name") || "").trim();
@@ -89,7 +82,7 @@ const server = http.createServer(async (req, res) => {
           { name },
           {
             projection: { _id: 0, name: 1, status: 1 },
-            collation: { locale: "en", strength: 2 } // case-insensitive exact
+            collation: { locale: "en", strength: 2 } 
           }
         );
 
@@ -101,29 +94,26 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // ---- STATIC SPA (AFTER API routes, BEFORE 404) ----
     if (method === "GET" && !u.pathname.startsWith("/api")) {
       const reqPath = u.pathname === "/" ? "/index.html" : u.pathname;
       const filePath = path.join(DIST_DIR, reqPath);
 
-      // prevent path traversal
       if (!filePath.startsWith(DIST_DIR)) {
         return sendJson(res, 400, { error: "Bad path" });
       }
 
       if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-        return sendFile(res, filePath); // IMPORTANT: return
+        return sendFile(res, filePath); 
       }
 
       const indexPath = path.join(DIST_DIR, "index.html");
       if (fs.existsSync(indexPath)) {
-        return sendFile(res, indexPath); // IMPORTANT: return
+        return sendFile(res, indexPath); 
       }
 
       return sendJson(res, 500, { error: "Frontend not built. Run `npm run build` in /client." });
     }
 
-    // Catch-all 404 (KEEP THIS LAST)
     return sendJson(res, 404, { error: "Not Found" });
   } catch (err) {
     console.error("[server] unhandled:", err);
