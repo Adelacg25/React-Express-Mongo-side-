@@ -1,10 +1,14 @@
 {
   "name": "react-express-mongo-side-",
+  "type": "module",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "build:client": "cd client && npm run build"
   },
   "repository": {
     "type": "git",
@@ -19,8 +23,12 @@
   "homepage": "https://github.com/Adelacg25/React-Express-Mongo-side-#readme",
   "dependencies": {
     "cors": "^2.8.5",
-    "dotenv": "^17.2.2",
+    "dotenv": "^16.4.5",
     "express": "^5.1.0",
-    "mongoose": "^8.18.1"
+    "mongoose": "^8.18.1",
+    "mongodb": "^6.8.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }
