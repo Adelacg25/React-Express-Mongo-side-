@@ -1,0 +1,120 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>DB JSON Dump</title>
+<style>
+  body { font-family: system-ui, Arial; margin: 16px; }
+  h1, h2 { margin: 0.6rem 0; }
+  code { background: #f3f4f6; padding: 0 4px; border-radius: 4px; }
+  pre  { background: #0b1020; color: #e5e7eb; padding: 12px; border-radius: 8px; overflow:auto; }
+  .row { margin: 10px 0; }
+</style>
+
+<h1>DB JSON Dump</h1>
+<p id="status">Loading…</p>
+<div class="row">
+  Using:
+  <code id="endpoint"></code>
+</div>
+
+<h2>Full API Response</h2>
+<pre id="jsonFull">—</pre>
+
+<h2>weeks</h2>
+<pre id="jsonWeeks">—</pre>
+
+<h2>assignments (flattened)</h2>
+<pre id="jsonFlat">—</pre>
+
+<h2>assignmentsByResident (map)</h2>
+<pre id="jsonByResident">—</pre>
+
+<h2>weekOff (flattened)</h2>
+<pre id="jsonOffFlat">—</pre>
+
+<h2>weekOffByResident (map)</h2>
+<pre id="jsonOffByResident">—</pre>
+
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const count = Number(q.get('count') || 27);
+  const rotationLen = q.has('rotationLen') ? Number(q.get('rotationLen')) : null;
+
+  const weeksUrl = rotationLen != null
+    ? `/api/weeks?count=${count}&rotationLen=${rotationLen}`
+    : `/api/weeks?count=${count}`;
+
+  document.getElementById('endpoint').textContent = weeksUrl;
+
+  const statusEl   = document.getElementById('status');
+  const elFull     = document.getElementById('jsonFull');
+  const elWeeks    = document.getElementById('jsonWeeks');
+  const elFlat     = document.getElementById('jsonFlat');
+  const elByRes    = document.getElementById('jsonByResident');
+  const elOffFlat  = document.getElementById('jsonOffFlat');
+  const elOffByRes = document.getElementById('jsonOffByResident');
+
+  try {
+    const res = await fetch(weeksUrl);
+    if (!res.ok) {
+      statusEl.textContent = `Failed: ${res.status} ${res.statusText}`;
+      return;
+    }
+
+    const data = await res.json();
+    elFull.textContent = JSON.stringify(data, null, 2);
+
+    if (!data || data.ok !== true) {
+      statusEl.textContent = 'API returned an error (see Full API Response above).';
+      return;
+    }
+
+    const weeks = Array.isArray(data.weeks) ? data.weeks : [];
+    statusEl.textContent = `ok — ${weeks.length} week(s)`;
+    elWeeks.textContent  = JSON.stringify(weeks, null, 2);
+
+    const flat = weeks.flatMap(w =>
+      (w.assignments || []).map(a => ({ week: w.week, ...a }))
+    );
+    elFlat.textContent = JSON.stringify(flat, null, 2);
+
+    const byResident = {};
+    for (const a of flat) {
+      const key = a.residentName || '(unknown)';
+      (byResident[key] ||= []).push({
+        week: a.week,
+        service: a.service,
+        slot: a.slot,
+        year: a.residentYear,
+        email: a.residentEmail || ''
+      });
+    }
+    elByRes.textContent = JSON.stringify(byResident, null, 2);
+
+    const offFlat = weeks.flatMap(w =>
+      (w.weekOff || []).map(o => ({
+        week: w.week,
+        residentId: o.residentId || '',
+        residentName: o.residentName || '',
+        residentEmail: o.residentEmail || '',
+        residentYear: o.residentYear ?? null
+      }))
+    );
+    elOffFlat.textContent = JSON.stringify(offFlat, null, 2);
+
+    const offByResident = {};
+    for (const o of offFlat) {
+      const key = o.residentName || '(unknown)';
+      (offByResident[key] ||= []).push({
+        week: o.week,
+        year: o.residentYear,
+        email: o.residentEmail || ''
+      });
+    }
+    elOffByRes.textContent = JSON.stringify(offByResident, null, 2);
+
+  } catch (e) {
+    statusEl.textContent = 'Fetch failed: ' + e.message;
+  }
+})();
+</script>

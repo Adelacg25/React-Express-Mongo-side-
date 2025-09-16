@@ -1,0 +1,103 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Schedule Debug</title>
+<style>
+  body{font-family:system-ui,Arial;padding:16px}
+  table{border-collapse:collapse;width:100%}
+  th,td{border:1px solid #e5e7eb;padding:8px;vertical-align:top}
+  th{background:#f8fafc}
+  .muted{color:#9ca3af}
+  .pill{border:1px solid #d1d5db;border-radius:12px;padding:2px 8px;display:inline-block;margin:2px 4px 2px 0}
+</style>
+
+<h1>Schedule Debug</h1>
+<div id="out">Loading…</div>
+
+<script>
+(async function () {
+  let out = document.getElementById('out');
+  if (!out) {
+    out = document.createElement('div');
+    out.id = 'out';
+    document.body.appendChild(out);
+  }
+
+  const qp = new URLSearchParams(location.search);
+  const count = Number(qp.get('count') || 53);
+
+  try {
+    const [weeksResp, resResp] = await Promise.all([
+      fetch(`/api/weeks?count=${count}`),
+      fetch(`/api/residents/full`).catch(() => null)
+    ]);
+
+    if (!weeksResp.ok) {
+      out.innerHTML = '<pre style="color:crimson">/api/weeks failed: '
+        + weeksResp.status + ' ' + weeksResp.statusText + '</pre>';
+      return;
+    }
+
+    const weeksData = await weeksResp.json();
+    const resData   = resResp && resResp.ok ? await resResp.json() : { ok:false };
+
+    if (!weeksData.ok) {
+      out.innerHTML = '<pre style="color:crimson">'
+        + JSON.stringify(weeksData, null, 2) + '</pre>';
+      return;
+    }
+
+    const weeks = weeksData.weeks || [];
+    const svcs  = [...new Set(weeks.flatMap(w => (w.assignments||[]).map(a => a.service)))].sort();
+
+    const residents = (resData.ok && Array.isArray(resData.residents))
+      ? resData.residents.map(r => {
+          const arr = ((r.weeksoff || r.weeksOff || []) || [])
+            .map(Number)
+            .filter(w => Number.isInteger(w) && w >= 1 && w <= count);
+          return { name: r.name, year: Number(r.year), offWeeks: new Set(arr) };
+        })
+      : null;
+
+    const whoIsOff = (w) => !residents ? []
+      : residents.filter(r => r.offWeeks && r.offWeeks.has(w))
+                 .map(r => `${r.name} (PGY-${r.year})`);
+
+    let html = '<table><thead><tr><th></th>';
+    weeks.forEach(w => html += `<th>Week ${w.week}</th>`);
+    html += '</tr></thead><tbody>';
+
+    svcs.forEach(s => {
+      html += `<tr><td><b>${s}</b></td>`;
+      weeks.forEach(w => {
+        const rows = (w.assignments||[])
+          .filter(a => a.service === s)
+          .sort((a,b)=>a.slot-b.slot);
+        html += `<td>${
+          rows.length
+            ? rows.map(a => `${a.residentName} (PGY-${a.residentYear}) [slot ${a.slot+1}]`).join('<br>')
+            : '<span class="muted">— empty —</span>'
+        }</td>`;
+      });
+      html += '</tr>';
+    });
+
+  html += `<tr><td><b>WEEK OFF (requested)</b></td>`;
+  weeks.forEach(w => {
+    const off = Array.isArray(w.weekOff) ? w.weekOff : [];
+    html += `<td>${
+      off.length
+        ? off.map(o => `<span class="pill">${o.residentName} (PGY-${o.residentYear})</span>`).join(' ')
+        : '<span class="muted">— none —</span>'
+    }</td>`;
+  });
+  html += '</tr>';
+
+
+    html += '</tbody></table>';
+    out.innerHTML = html;
+  } catch (e) {
+    out.innerHTML = '<pre style="color:crimson">Error: ' + (e && e.message || e) + '</pre>';
+    console.error(e);
+  }
+})();
+</script>
