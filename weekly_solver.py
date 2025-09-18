@@ -31,10 +31,46 @@ def plan_cc(residents, weeks, other_weekly_slots):
     for w in range(1, weeks + 1):
         model.Add(sum(C[(r_i, w)] for r_i, _ in enumerate(residents)) == S[w])
 
-    WINDOW = 6
+    H = {h for h in HOLIDAY_WEEKS if 1 <= h <= weeks}
+    def in_range(w): return 1 <= w <= weeks
+
+    follow_miss_penalties = []   
+    prefer5_penalties     = []  
+
     for r_i, _ in enumerate(residents):
-        for t in range(1, weeks - WINDOW + 2):
-            model.Add(sum(C[(r_i, w)] for w in range(t, t + WINDOW)) <= 1)
+        for t in range(1, weeks + 1):
+            for d in range(1, 5):
+                if in_range(t + d):
+                    model.Add(C[(r_i, t)] + C[(r_i, t + d)] <= 1)
+
+            cand = []
+            for d in (5, 6, 7):
+                w = t + d
+                if in_range(w) and (w not in H):
+                    cand.append(w)
+
+            if cand:
+                model.Add(sum(C[(r_i, w)] for w in cand) <= 1)
+
+                s = model.NewBoolVar(f"miss_follow_r{r_i}_t{t}")
+                model.Add(sum(C[(r_i, w)] for w in cand) + s >= C[(r_i, t)])
+                follow_miss_penalties.append(s)
+
+                wsum = model.NewIntVar(0, len(cand), f"wsum_r{r_i}_t{t}")
+                model.Add(wsum == sum(C[(r_i, w)] for w in cand))
+
+                use_t6 = model.NewBoolVar(f"use_t6_r{r_i}_t{t}")
+                if in_range(t + 6) and (t + 6) not in H:
+                    model.Add(use_t6 == C[(r_i, t + 6)])
+                else:
+                    model.Add(use_t6 == 0)
+
+                p = model.NewBoolVar(f"not_ideal5_r{r_i}_t{t}")
+                model.Add(p >= wsum - use_t6) 
+                model.Add(p <= wsum)       
+                model.Add(p <= 1 - use_t6)   
+                prefer5_penalties.append(p)
+
 
     lo = max(0, (weeks - 1) // 6 - 1)
     hi = (weeks + 5) // 6 + 1
@@ -59,7 +95,7 @@ def plan_cc(residents, weeks, other_weekly_slots):
         model.Add(miss == 1 - got)
         first_window_penalties.append(miss)
 
-    model.Minimize(10 * sum(off_penalties) + 2 * sum(first_window_penalties))
+    model.Minimize(10 * sum(off_penalties) + 2 * sum(first_window_penalties) + 2 * sum(prefer5_penalties)+  2 * sum(first_window_penalties))
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 10.0

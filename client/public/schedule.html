@@ -1,97 +1,120 @@
 <!doctype html>
 <meta charset="utf-8" />
-<title>Schedule Debug</title>
+<title>Schedule — Residents × Weeks</title>
 <style>
   body{font-family:system-ui,Arial;padding:16px}
   table{border-collapse:collapse;width:100%}
-  th,td{border:1px solid #e5e7eb;padding:8px;vertical-align:top}
-  th{background:#f8fafc}
+  th,td{border:1px solid #e5e7eb;padding:6px 8px;vertical-align:middle;text-align:center}
+  th{background:#f8fafc;position:sticky;top:0;z-index:1}
+  thead th:first-child, tbody th:first-child{position:sticky;left:0;background:#f8fafc;text-align:left;z-index:2}
   .muted{color:#9ca3af}
-  .pill{border:1px solid #d1d5db;border-radius:12px;padding:2px 8px;display:inline-block;margin:2px 4px 2px 0}
+  .chip{display:inline-block;border:1px solid #d1d5db;border-radius:999px;padding:2px 8px;font-size:12px;line-height:1}
+  .svc-CC{background:#ffee00;border-color:#eeff00;}
+  .svc-ELECTIVE{background:#bebdbd;border-color:#ffffff}
+  .svc-WARD{background:#200096;border-color:#ffffff;color:#ffffff}
+  .svc-STROKE{background:#ff0000;border-color:#d69999}
+  .svc-UH{background:#ae00ff;border-color:#d69999}
+  .svc-B-U{background:#00ff22;border-color:#d69999}
+  .svc-OFF{background:#000000;border-color:#000000;color:#ffffff}
 </style>
 
-<h1>Schedule Debug</h1>
+<h1>Schedule</h1>
 <div id="out">Loading…</div>
 
 <script>
 (async function () {
-  let out = document.getElementById('out');
-  if (!out) {
-    out = document.createElement('div');
-    out.id = 'out';
-    document.body.appendChild(out);
-  }
-
+  const out = document.getElementById('out');
   const qp = new URLSearchParams(location.search);
   const count = Number(qp.get('count') || 53);
 
   try {
-    const [weeksResp, resResp] = await Promise.all([
-      fetch(`/api/weeks?count=${count}`),
-      fetch(`/api/residents/full`).catch(() => null)
-    ]);
-
+    const weeksResp = await fetch(`/api/weeks?count=${count}`);
     if (!weeksResp.ok) {
-      out.innerHTML = '<pre style="color:crimson">/api/weeks failed: '
-        + weeksResp.status + ' ' + weeksResp.statusText + '</pre>';
+      out.innerHTML = `<pre style="color:crimson">/api/weeks failed: ${weeksResp.status} ${weeksResp.statusText}</pre>`;
+      return;
+    }
+    const data = await weeksResp.json();
+    if (!data.ok) {
+      out.innerHTML = `<pre style="color:crimson">${JSON.stringify(data,null,2)}</pre>`;
       return;
     }
 
-    const weeksData = await weeksResp.json();
-    const resData   = resResp && resResp.ok ? await resResp.json() : { ok:false };
+    const weeks = Array.isArray(data.weeks) ? data.weeks : [];
 
-    if (!weeksData.ok) {
-      out.innerHTML = '<pre style="color:crimson">'
-        + JSON.stringify(weeksData, null, 2) + '</pre>';
-      return;
+    const resMap = new Map(); 
+    const keyOf = (a) => (a.residentId && String(a.residentId)) || (a.residentName || '(unknown)');
+
+    for (const w of weeks) {
+      for (const a of (w.assignments || [])) {
+        const k = keyOf(a);
+        if (!resMap.has(k)) resMap.set(k, { name: a.residentName || k, year: a.residentYear || '' });
+      }
+      for (const o of (w.weekOff || [])) {
+        const k = keyOf(o);
+        if (!resMap.has(k)) resMap.set(k, { name: o.residentName || k, year: o.residentYear || '' });
+      }
     }
 
-    const weeks = weeksData.weeks || [];
-    const svcs  = [...new Set(weeks.flatMap(w => (w.assignments||[]).map(a => a.service)))].sort();
+    const residents = [...resMap.entries()]
+      .map(([k, v]) => {
+        const y = Number(v.year);
+        return {
+          key: k,
+          name: v.name || k,
+          year: Number.isFinite(y) ? y : 999,
+        };
+      })
+      .sort((a, b) => (a.year - b.year) || a.name.localeCompare(b.name));
 
-    const residents = (resData.ok && Array.isArray(resData.residents))
-      ? resData.residents.map(r => {
-          const arr = ((r.weeksoff || r.weeksOff || []) || [])
-            .map(Number)
-            .filter(w => Number.isInteger(w) && w >= 1 && w <= count);
-          return { name: r.name, year: Number(r.year), offWeeks: new Set(arr) };
-        })
-      : null;
 
-    const whoIsOff = (w) => !residents ? []
-      : residents.filter(r => r.offWeeks && r.offWeeks.has(w))
-                 .map(r => `${r.name} (PGY-${r.year})`);
+    const grid = new Map();
+    for (const w of weeks) {
+      const m = new Map();
+      for (const a of (w.assignments || [])) {
+        const k = keyOf(a);
+        const svc = (a.service || '').toUpperCase();
+        if (!m.has(k)) m.set(k, svc);
+        else m.set(k, m.get(k) + ', ' + svc);
+      }
+      for (const o of (w.weekOff || [])) {
+        const k = keyOf(o);
+        m.set(k, 'OFF');
+      }
+      grid.set(w.week, m);
+    }
 
-    let html = '<table><thead><tr><th></th>';
-    weeks.forEach(w => html += `<th>Week ${w.week}</th>`);
+    let html = '<table><thead><tr><th>Resident</th>';
+    weeks.forEach(w => { html += `<th>W${w.week}</th>`; });
     html += '</tr></thead><tbody>';
 
-    svcs.forEach(s => {
-      html += `<tr><td><b>${s}</b></td>`;
-      weeks.forEach(w => {
-        const rows = (w.assignments||[])
-          .filter(a => a.service === s)
-          .sort((a,b)=>a.slot-b.slot);
-        html += `<td>${
-          rows.length
-            ? rows.map(a => `${a.residentName} (PGY-${a.residentYear}) [slot ${a.slot+1}]`).join('<br>')
-            : '<span class="muted">— empty —</span>'
-        }</td>`;
-      });
+    const chip = (svc) => {
+      const cls = 'chip svc-' + (svc || '').toUpperCase().replace(/\s+/g,'');
+      return `<span class="${cls}">${svc}</span>`;
+    };
+
+    for (const r of residents) {
+      const left = r.year ? `${r.name} <span class="muted">(PGY-${r.year})</span>` : r.name;
+      html += `<tr><th>${left}</th>`;
+      for (const w of weeks) {
+        const svc = (grid.get(w.week) && grid.get(w.week).get(r.key)) || '';
+        if (!svc) {
+          html += `<td class="muted">—</td>`;
+        } else if (svc === 'OFF') {
+          html += `<td>${chip('OFF')}</td>`;
+        } else {
+          html += `<td>${chip(svc)}</td>`;
+        }
+      }
       html += '</tr>';
-    });
-
-  html += `<tr><td><b>WEEK OFF (requested)</b></td>`;
-  weeks.forEach(w => {
-    const off = Array.isArray(w.weekOff) ? w.weekOff : [];
-    html += `<td>${
-      off.length
-        ? off.map(o => `<span class="pill">${o.residentName} (PGY-${o.residentYear})</span>`).join(' ')
-        : '<span class="muted">— none —</span>'
-    }</td>`;
-  });
-  html += '</tr>';
-
+    }
+    html += `<tr><th><b>Total</b></th>`;
+    for (const w of weeks) {
+      const m = grid.get(w.week) || new Map();
+      let total = 0;
+      m.forEach((svc) => { if (svc && svc !== 'OFF') total += 1; });
+      html += `<td><b>${total}</b></td>`;
+    }
+    html += `</tr>`;
 
     html += '</tbody></table>';
     out.innerHTML = html;
