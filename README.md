@@ -1,5 +1,6 @@
-#React/mongo/express side, Clarissa, Trevor, Shea 
-
-#to get it running on your local - http://localhost:3000/
-#open terminal and switch to client with - cd client
-#then run the page with - npm start 
+#React/mongo/express side, Clarissa, Trevor, Shea<br><br>
+#from root folder to start server run - node index.js<br>
+#view on - localhost:3000<br>
+#shows produced schedule - localhost:3000/schedule.html<br>
+#shows produced json - localhost:3000/db.html<br>
+#to update for any changes made - cd client, npm run build
